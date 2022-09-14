@@ -13,7 +13,7 @@ from . import clock, rtp
 from .codecs import get_capabilities, get_encoder, is_rtx
 from .codecs.base import Encoder
 from .exceptions import InvalidStateError
-from .mediastreams import MediaStreamError, MediaStreamTrack
+from .mediastreams import MediaStreamError, MediaStreamTrack, EncodedMediaStreamTrack
 from .rtcrtpparameters import RTCRtpCodecParameters, RTCRtpSendParameters
 from .rtp import (
     RTCP_PSFB_APP,
@@ -266,25 +266,32 @@ class RTCRtpSender:
                 pass
 
     async def _next_encoded_frame(self, codec: RTCRtpCodecParameters):
-        # get [Frame|Packet]
-        data = await self.__track.recv()
-        audio_level = None
+        if isinstance(self.__track, EncodedMediaStreamTrack):
+            # Frames come already encoded from the MediaStreamTrack
+            packet_data, timestamp = await self.__track.recv()
+            audio_level = None
+            payloads = packet_data
 
-        if self.__encoder is None:
-            self.__encoder = get_encoder(codec)
-
-        if isinstance(data, Frame):
-            # encode frame
-            if isinstance(data, AudioFrame):
-                audio_level = rtp.compute_audio_level_dbov(data)
-
-            force_keyframe = self.__force_keyframe
-            self.__force_keyframe = False
-            payloads, timestamp = await self.__loop.run_in_executor(
-                None, self.__encoder.encode, data, force_keyframe
-            )
         else:
-            payloads, timestamp = self.__encoder.pack(data)
+            # get [Frame|Packet]
+            data = await self.__track.recv()
+            audio_level = None
+
+            if self.__encoder is None:
+                self.__encoder = get_encoder(codec)
+
+            if isinstance(data, Frame):
+                # encode frame
+                if isinstance(data, AudioFrame):
+                    audio_level = rtp.compute_audio_level_dbov(data)
+
+                force_keyframe = self.__force_keyframe
+                self.__force_keyframe = False
+                payloads, timestamp = await self.__loop.run_in_executor(
+                    None, self.__encoder.encode, data, force_keyframe
+                )
+            else:
+                payloads, timestamp = self.__encoder.pack(data)
 
         return RTCEncodedFrame(payloads, timestamp, audio_level)
 

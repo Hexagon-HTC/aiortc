@@ -3,7 +3,7 @@ import fractions
 import time
 import uuid
 from abc import ABCMeta, abstractmethod
-from typing import Tuple, Union
+from typing import Tuple, Union, List
 
 from av import AudioFrame, VideoFrame
 from av.frame import Frame
@@ -146,3 +146,8 @@ class VideoStreamTrack(MediaStreamTrack):
         frame.pts = pts
         frame.time_base = time_base
         return frame
+
+
+class EncodedMediaStreamTrack(MediaStreamTrack):
+    async def recv(self) -> Tuple[List[bytes], int]:
+        pass
